@@ -216,3 +216,20 @@ function qs(array $overrides = []): string {
     $params = array_filter($params, fn($v) => $v !== '' && $v !== null);
     return $params ? '?' . http_build_query($params) : '';
 }
+
+/**
+ * Returns a URL to a customer portal page.
+ * Usage: customer_url('products.php')  →  /megapharm/customer/products.php
+ *        customer_url('')              →  /megapharm/customer/
+ */
+function customer_url(string $path = ''): string {
+    return base_url('customer/' . ltrim($path, '/'));
+}
+
+/**
+ * Returns a URL to a customer-includes asset.
+ * (Used for header/footer links back to customer pages.)
+ */
+function admin_url(string $path = ''): string {
+    return base_url('admin/' . ltrim($path, '/'));
+}

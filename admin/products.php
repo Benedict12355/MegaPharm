@@ -5,6 +5,32 @@ require_staff_or_admin();
 $active = 'products';
 $page_title = 'Products';
 
+/* ---------- IMAGE UPLOAD HELPER ---------- */
+function handle_product_image(?string $existingPath = null): ?string {
+    if (empty($_FILES['product_image']['name'])) return $existingPath;
+    $file = $_FILES['product_image'];
+    if ($file['error'] !== UPLOAD_ERR_OK) return $existingPath;
+
+    $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime  = finfo_file($finfo, $file['tmp_name']);
+    finfo_close($finfo);
+    if (!isset($allowed[$mime])) return $existingPath;
+    if ($file['size'] > 2 * 1024 * 1024) return $existingPath;
+
+    $ext      = $allowed[$mime];
+    $filename = 'prd_' . bin2hex(random_bytes(8)) . '.' . $ext;
+    $dir      = __DIR__ . '/../assets/img/products/';
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    if (!move_uploaded_file($file['tmp_name'], $dir . $filename)) return $existingPath;
+
+    if ($existingPath) {
+        $old = __DIR__ . '/../' . ltrim($existingPath, '/');
+        if (is_file($old)) @unlink($old);
+    }
+    return 'assets/img/products/' . $filename;
+}
+
 /* ---------- POST ACTIONS ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? '');
@@ -12,10 +38,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($act === 'create') {
         $code = next_number('products', 'product_code', 'PRD-');
+        $imagePath = handle_product_image(null);
+
         $stmt = db()->prepare('INSERT INTO products 
             (product_code, product_name, generic_name, brand, category_id, age_group,
-             selling_price, purchase_price, reorder_level, requires_prescription, status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+             selling_price, purchase_price, reorder_level, requires_prescription, status, image_path)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
         $stmt->execute([
             $code,
             trim($_POST['product_name']),
@@ -27,7 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             (float)($_POST['purchase_price'] ?? 0),
             (int)$_POST['reorder_level'],
             isset($_POST['requires_prescription']) ? 1 : 0,
-            'active',
+            $_POST['status'] ?? 'active',
+            $imagePath,
         ]);
         $pid = (int)db()->lastInsertId();
 
@@ -51,10 +80,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } elseif ($act === 'update') {
         $id = (int)$_POST['id'];
+        $old = db()->prepare('SELECT image_path FROM products WHERE id=?');
+        $old->execute([$id]);
+        $existing = $old->fetchColumn() ?: null;
+        $imagePath = handle_product_image($existing);
+
         db()->prepare('UPDATE products 
             SET product_name=?, generic_name=?, brand=?, category_id=?, age_group=?,
                 selling_price=?, purchase_price=?, reorder_level=?, 
-                requires_prescription=?, status=?
+                requires_prescription=?, status=?, image_path=?
             WHERE id=?')
            ->execute([
                trim($_POST['product_name']),
@@ -67,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                (int)$_POST['reorder_level'],
                isset($_POST['requires_prescription']) ? 1 : 0,
                $_POST['status'] ?? 'active',
+               $imagePath,
                $id,
            ]);
         audit('Update', 'Product', "Updated #$id");
@@ -93,6 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $q      = trim($_GET['q'] ?? '');
 $cat    = $_GET['cat'] ?? '';
 $type   = $_GET['type'] ?? '';
+$age    = $_GET['age'] ?? '';
 $status = $_GET['status'] ?? '';
 
 $sql = "SELECT p.*, c.category_name,
@@ -119,6 +155,10 @@ if ($type === 'medicines') {
 } elseif ($type === 'milks') {
     $sql .= " AND c.category_name = 'Milks'";
 }
+if ($age !== '') {
+    $sql .= " AND p.age_group = ?";
+    $params[] = $age;
+}
 if ($status === 'active' || $status === 'inactive') {
     $sql .= " AND p.status = ?";
     $params[] = $status;
@@ -129,7 +169,6 @@ $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $products = $stmt->fetchAll();
 
-/* ---------- STATS ---------- */
 $statTotal     = (int)db()->query("SELECT COUNT(*) FROM products WHERE status='active'")->fetchColumn();
 $statMedicines = (int)db()->query("SELECT COUNT(*) FROM products p LEFT JOIN categories c ON c.id=p.category_id WHERE p.status='active' AND (c.category_name NOT IN ('Cosmetics','Milks') OR c.id IS NULL)")->fetchColumn();
 $statCosmetics = (int)db()->query("SELECT COUNT(*) FROM products p JOIN categories c ON c.id=p.category_id WHERE p.status='active' AND c.category_name='Cosmetics'")->fetchColumn();
@@ -141,7 +180,6 @@ require_once __DIR__ . '/../includes/header.php';
 ?>
 <h1 style="display:none">Products</h1>
 
-<!-- STAT CARDS -->
 <div class="stats">
   <div class="stat"><div class="stat-label">Total Products</div><div class="stat-value"><?= $statTotal ?></div></div>
   <div class="stat"><div class="stat-label">Medicines</div><div class="stat-value"><?= $statMedicines ?></div></div>
@@ -150,49 +188,33 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <div class="card">
-  <!-- FILTER TABS + SEARCH -->
   <form method="get" class="toolbar">
     <div class="search grow">
-      <input class="input" name="q" placeholder="Search product..."
-             value="<?= e($q) ?>" style="width:100%">
+      <input class="input" name="q" placeholder="Search product..." value="<?= e($q) ?>" style="width:100%">
     </div>
-
     <div class="tabs">
-      <a class="tab <?= !$type ? 'active' : '' ?>"
-         href="<?= base_url('admin/products.php' . qs(['type' => ''])) ?>">All products</a>
-      <a class="tab <?= $type === 'medicines' ? 'active' : '' ?>"
-         href="<?= base_url('admin/products.php' . qs(['type' => 'medicines'])) ?>">Medicines</a>
-      <a class="tab <?= $type === 'cosmetics' ? 'active' : '' ?>"
-         href="<?= base_url('admin/products.php' . qs(['type' => 'cosmetics'])) ?>">Cosmetics</a>
-      <a class="tab <?= $type === 'milks' ? 'active' : '' ?>"
-         href="<?= base_url('admin/products.php' . qs(['type' => 'milks'])) ?>">Milks</a>
+      <a class="tab <?= !$type ? 'active' : '' ?>" href="<?= base_url('admin/products.php' . qs(['type' => ''])) ?>">All products</a>
+      <a class="tab <?= $type === 'medicines' ? 'active' : '' ?>" href="<?= base_url('admin/products.php' . qs(['type' => 'medicines'])) ?>">Medicines</a>
+      <a class="tab <?= $type === 'cosmetics' ? 'active' : '' ?>" href="<?= base_url('admin/products.php' . qs(['type' => 'cosmetics'])) ?>">Cosmetics</a>
+      <a class="tab <?= $type === 'milks' ? 'active' : '' ?>" href="<?= base_url('admin/products.php' . qs(['type' => 'milks'])) ?>">Milks</a>
     </div>
-
     <button class="btn btn-primary" type="button" onclick="openModal('addProduct')">➕ Add product</button>
   </form>
 
-  <!-- CATEGORY PILLS -->
   <div class="pills">
-    <a class="pill <?= $cat === '' ? 'active' : '' ?>"
-       href="<?= base_url('admin/products.php' . qs(['cat' => ''])) ?>">All</a>
+    <a class="pill <?= $cat === '' ? 'active' : '' ?>" href="<?= base_url('admin/products.php' . qs(['cat' => ''])) ?>">All</a>
     <?php foreach ($categories as $c): ?>
-      <a class="pill <?= $cat == $c['id'] ? 'active' : '' ?>"
-         href="<?= base_url('admin/products.php' . qs(['cat' => $c['id']])) ?>">
+      <a class="pill <?= $cat == $c['id'] ? 'active' : '' ?>" href="<?= base_url('admin/products.php' . qs(['cat' => $c['id']])) ?>">
         <?= e($c['category_name']) ?>
       </a>
     <?php endforeach; ?>
   </div>
 
-  <!-- ⬇ SIMPLIFIED TABLE: Name | Price | Stock | Expiry | Action -->
   <div class="table-wrap" style="border:0">
     <table class="data">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Price (₱)</th>
-          <th>Stock</th>
-          <th>Expiry</th>
-          <th>Action</th>
+          <th>Name</th><th>Price (₱)</th><th>Stock</th><th>Expiry</th><th>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -207,8 +229,7 @@ require_once __DIR__ . '/../includes/header.php';
           <td><?= $p['expiry'] ? e(date('Y-m-d', strtotime($p['expiry']))) : '—' ?></td>
           <td class="row-actions">
             <?php if (is_admin()): ?>
-              <button class="btn-icon" title="Edit"
-                      onclick='editProduct(<?= json_encode($p, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>✏️</button>
+              <button class="btn-icon" title="Edit" onclick='editProduct(<?= json_encode($p, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>✏️</button>
               <form method="post" style="display:inline" onsubmit="return confirm('Delete this product?')">
                 <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
                 <input type="hidden" name="act" value="delete">
@@ -224,10 +245,7 @@ require_once __DIR__ . '/../includes/header.php';
       </tbody>
     </table>
   </div>
-
-  <p class="text-muted" style="padding:12px 16px">
-    Showing 1 to <?= count($products) ?> of <?= count($products) ?> product
-  </p>
+  <p class="text-muted" style="padding:12px 16px">Showing 1 to <?= count($products) ?> of <?= count($products) ?> product</p>
 </div>
 
 <!-- ============ MODAL: ADD PRODUCT ============ -->
@@ -235,7 +253,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="modal">
     <button class="modal-close" onclick="closeModal('addProduct')">✕</button>
     <h3>Add New Product</h3>
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
       <input type="hidden" name="act" value="create">
       <div class="form-grid">
@@ -261,6 +279,11 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <div class="field"><label>Unit Price (₱)</label><input name="selling_price" type="number" step="0.01" value="0" required></div>
         <div class="field"><label>Expiry Date</label><input name="expiry_date" type="date"></div>
+        <div class="field full">
+          <label>Product Image</label>
+          <input type="file" name="product_image" accept="image/*">
+          <small class="text-muted">JPG, PNG, WEBP · Max 2MB</small>
+        </div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-light" onclick="closeModal('addProduct')">Cancel</button>
@@ -275,7 +298,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="modal">
     <button class="modal-close" onclick="closeModal('editProduct')">✕</button>
     <h3>Edit Product</h3>
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
       <input type="hidden" name="act" value="update">
       <input type="hidden" name="id" id="ep-id">
@@ -300,6 +323,11 @@ require_once __DIR__ . '/../includes/header.php';
             <option value="inactive">Inactive</option>
           </select>
         </div>
+        <div class="field full">
+          <label>Replace Image (optional)</label>
+          <input type="file" name="product_image" accept="image/*">
+          <div id="ep-image-preview" style="margin-top:8px"></div>
+        </div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-light" onclick="closeModal('editProduct')">Cancel</button>
@@ -320,6 +348,13 @@ function editProduct(p) {
   document.getElementById('ep-pp').value      = p.purchase_price || 0;
   document.getElementById('ep-sp').value      = p.selling_price || 0;
   document.getElementById('ep-status').value  = p.status || 'active';
+
+  const prev = document.getElementById('ep-image-preview');
+  if (p.image_path) {
+    prev.innerHTML = `<img src="<?= base_url('') ?>${p.image_path}" style="height:80px;border-radius:6px">`;
+  } else {
+    prev.innerHTML = '<span class="text-muted" style="font-size:12px">No image uploaded</span>';
+  }
   openModal('editProduct');
 }
 </script>
