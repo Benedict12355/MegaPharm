@@ -1,7 +1,7 @@
 <?php
 // admin/purchase-orders.php
 require_once __DIR__ . '/../includes/functions.php';
-require_login();
+require_staff_or_admin();
 $active = 'purchase';
 $page_title = 'Purchase Orders';
 
@@ -32,11 +32,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare("UPDATE purchase_orders SET status='cancelled' WHERE id=?")->execute([$id]);
         audit('Cancel', 'Purchase Orders', "Cancelled #$id");
         flash('success', 'Purchase Order cancelled.');
+
+    } elseif ($act === 'approve') {
+        // 🔒 Admin only
+        if (!can('approve', 'purchase_orders')) {
+            flash('error', 'Only administrators can approve purchase orders.');
+            redirect(base_url('admin/purchase-orders.php'));
+        }
+        $id = (int)$_POST['id'];
+        db()->prepare("UPDATE purchase_orders SET status='approved' WHERE id=?")->execute([$id]);
+        audit('Approve', 'Purchase Orders', "Approved #$id");
+        flash('success', 'Purchase Order approved.');
     }
     redirect(base_url('admin/purchase-orders.php' . qs()));
 }
 
-/* ---------- FILTERS ---------- */
 $q        = trim($_GET['q'] ?? '');
 $status   = $_GET['status'] ?? '';
 $supplier = $_GET['supplier'] ?? '';
@@ -71,7 +81,6 @@ $statApproved = (int)db()->query("SELECT COUNT(*) FROM purchase_orders WHERE sta
 $statReceived = (int)db()->query("SELECT COUNT(*) FROM purchase_orders WHERE status='received'")->fetchColumn();
 
 $suppliers = db()->query('SELECT id, supplier_name FROM suppliers WHERE status="active" ORDER BY supplier_name')->fetchAll();
-
 $statusList = ['draft','pending','approved','ordered','partially_received','received','cancelled'];
 
 require_once __DIR__ . '/../includes/header.php';
@@ -120,13 +129,8 @@ require_once __DIR__ . '/../includes/header.php';
     <table class="data">
       <thead>
         <tr>
-          <th>PO No.</th>
-          <th>Supplier</th>
-          <th>Total</th>
-          <th>Date</th>
-          <th>Expected</th>
-          <th>Status</th>
-          <th>Actions</th>
+          <th>PO No.</th><th>Supplier</th><th>Total</th><th>Date</th>
+          <th>Expected</th><th>Status</th><th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -152,6 +156,14 @@ require_once __DIR__ . '/../includes/header.php';
           <td><?= $o['expected_date'] ? e($o['expected_date']) : '—' ?></td>
           <td><span class="badge <?= $cls ?>"><?= e(ucfirst(str_replace('_', ' ', $o['status']))) ?></span></td>
           <td class="row-actions">
+            <?php if (can('approve', 'purchase_orders') && $o['status'] === 'pending'): ?>
+              <form method="post" style="display:inline">
+                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                <input type="hidden" name="act" value="approve">
+                <input type="hidden" name="id" value="<?= $o['id'] ?>">
+                <button class="btn-icon" title="Approve">✓</button>
+              </form>
+            <?php endif; ?>
             <?php if ($o['status'] !== 'cancelled' && $o['status'] !== 'received'): ?>
               <form method="post" style="display:inline" onsubmit="return confirm('Cancel this PO?')">
                 <input type="hidden" name="csrf" value="<?= csrf_token() ?>">

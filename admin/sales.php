@@ -1,11 +1,29 @@
 <?php
 // admin/sales.php
 require_once __DIR__ . '/../includes/functions.php';
-require_login();
+require_staff_or_admin();
 $active = 'sales';
 $page_title = 'Sales';
 
-/* ---------- FILTERS ---------- */
+/* ---------- POST: VOID / REFUND (admin only) ---------- */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check($_POST['csrf'] ?? '');
+    $act = $_POST['act'] ?? '';
+    $id  = (int)($_POST['id'] ?? 0);
+
+    if (in_array($act, ['void', 'refund'], true)) {
+        if (!can($act, 'sales')) {
+            flash('error', 'Only administrators can void or refund sales.');
+            redirect(base_url('admin/sales.php'));
+        }
+        db()->prepare('UPDATE sales SET status=? WHERE id=?')
+           ->execute([$act === 'void' ? 'voided' : 'refunded', $id]);
+        audit(ucfirst($act), 'Sales', "Sale #$id");
+        flash('success', 'Sale ' . $act . 'ed.');
+    }
+    redirect(base_url('admin/sales.php'));
+}
+
 $q       = trim($_GET['q'] ?? '');
 $payment = $_GET['payment'] ?? '';
 $status  = $_GET['status'] ?? '';
@@ -24,16 +42,10 @@ if ($q !== '') {
     $like = "%$q%";
     array_push($params, $like, $like);
 }
-if ($payment !== '') {
-    $sql .= " AND s.payment_method = ?";
-    $params[] = $payment;
-}
-if ($status !== '') {
-    $sql .= " AND s.status = ?";
-    $params[] = $status;
-}
-if ($from !== '') { $sql .= " AND DATE(s.sale_date) >= ?"; $params[] = $from; }
-if ($to   !== '') { $sql .= " AND DATE(s.sale_date) <= ?"; $params[] = $to; }
+if ($payment !== '') { $sql .= " AND s.payment_method = ?"; $params[] = $payment; }
+if ($status  !== '') { $sql .= " AND s.status = ?";         $params[] = $status; }
+if ($from    !== '') { $sql .= " AND DATE(s.sale_date) >= ?"; $params[] = $from; }
+if ($to      !== '') { $sql .= " AND DATE(s.sale_date) <= ?"; $params[] = $to; }
 
 $sql .= " ORDER BY s.id DESC LIMIT 200";
 
@@ -43,7 +55,6 @@ $sales = $stmt->fetchAll();
 
 $totalCount = (int)db()->query("SELECT COUNT(*) FROM sales")->fetchColumn();
 
-/* ---------- CHART DATA (last 8 months) ---------- */
 $chartRows = db()->query("SELECT DATE_FORMAT(sale_date,'%b') ym, SUM(total_amount) t
     FROM sales
     WHERE status='completed' AND sale_date >= DATE_SUB(CURDATE(), INTERVAL 8 MONTH)
@@ -97,13 +108,8 @@ require_once __DIR__ . '/../includes/header.php';
     <table class="data">
       <thead>
         <tr>
-          <th>Invoice No.</th>
-          <th>Customer</th>
-          <th>Date</th>
-          <th>Total</th>
-          <th>Payment</th>
-          <th>Status</th>
-          <th>Action</th>
+          <th>Invoice No.</th><th>Customer</th><th>Date</th><th>Total</th>
+          <th>Payment</th><th>Status</th><th>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -148,6 +154,14 @@ require_once __DIR__ . '/../includes/header.php';
     <h3>Sale Details</h3>
     <div id="saleBody"></div>
     <div class="modal-actions">
+      <?php if (can('refund', 'sales')): ?>
+        <form method="post" style="display:inline" onsubmit="return confirm('Refund this sale?')">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <input type="hidden" name="act" value="refund">
+          <input type="hidden" name="id" id="sv-refund-id">
+          <button class="btn btn-danger">Refund</button>
+        </form>
+      <?php endif; ?>
       <button class="btn btn-light" onclick="window.print()">Print Receipt</button>
       <button class="btn btn-primary" onclick="closeModal('viewSaleModal')">Close</button>
     </div>
@@ -187,6 +201,8 @@ function viewSale(s) {
     <p><b>Amount Paid:</b> ₱${parseFloat(s.amount_paid).toFixed(2)}</p>
     <p><b>Change:</b> ₱${parseFloat(s.change_amount).toFixed(2)}</p>
   `;
+  const ref = document.getElementById('sv-refund-id');
+  if (ref) ref.value = s.id;
   openModal('viewSaleModal');
 }
 </script>

@@ -1,11 +1,10 @@
 <?php
 // admin/audit-logs.php
 require_once __DIR__ . '/../includes/functions.php';
-require_role('admin');
+require_role('admin');   // ← Staff blocked here
 $active = 'audit';
 $page_title = 'Audit Logs';
 
-/* ---------- FILTERS ---------- */
 $q      = trim($_GET['q'] ?? '');
 $user   = $_GET['user'] ?? '';
 $role   = $_GET['role'] ?? '';
@@ -22,24 +21,12 @@ if ($q !== '') {
     $like = "%$q%";
     array_push($params, $like, $like);
 }
-if ($user !== '') {
-    $sql .= ' AND username_snapshot = ?';
-    $params[] = $user;
-}
-if ($role !== '') {
-    $sql .= ' AND role_snapshot = ?';
-    $params[] = $role;
-}
-if ($module !== '') {
-    $sql .= ' AND module = ?';
-    $params[] = $module;
-}
-if ($action !== '') {
-    $sql .= ' AND action = ?';
-    $params[] = $action;
-}
-if ($from !== '') { $sql .= ' AND DATE(created_at) >= ?'; $params[] = $from; }
-if ($to   !== '') { $sql .= ' AND DATE(created_at) <= ?'; $params[] = $to; }
+if ($user !== '')   { $sql .= ' AND username_snapshot = ?'; $params[] = $user; }
+if ($role !== '')   { $sql .= ' AND role_snapshot = ?';     $params[] = $role; }
+if ($module !== '') { $sql .= ' AND module = ?';            $params[] = $module; }
+if ($action !== '') { $sql .= ' AND action = ?';            $params[] = $action; }
+if ($from !== '')   { $sql .= ' AND DATE(created_at) >= ?'; $params[] = $from; }
+if ($to   !== '')   { $sql .= ' AND DATE(created_at) <= ?'; $params[] = $to; }
 
 $sql .= ' ORDER BY id DESC LIMIT 300';
 
@@ -66,36 +53,28 @@ require_once __DIR__ . '/../includes/header.php';
     <select class="select" name="user" onchange="this.form.submit()">
       <option value="">User: All</option>
       <?php foreach ($users as $usr): ?>
-        <option value="<?= e($usr) ?>" <?= $user === $usr ? 'selected' : '' ?>>
-          <?= e($usr) ?>
-        </option>
+        <option value="<?= e($usr) ?>" <?= $user === $usr ? 'selected' : '' ?>><?= e($usr) ?></option>
       <?php endforeach; ?>
     </select>
 
     <select class="select" name="role" onchange="this.form.submit()">
       <option value="">Role: All</option>
       <?php foreach ($roles as $r): ?>
-        <option value="<?= e($r) ?>" <?= $role === $r ? 'selected' : '' ?>>
-          <?= e(ucfirst($r)) ?>
-        </option>
+        <option value="<?= e($r) ?>" <?= $role === $r ? 'selected' : '' ?>><?= e(ucfirst($r)) ?></option>
       <?php endforeach; ?>
     </select>
 
     <select class="select" name="module" onchange="this.form.submit()">
       <option value="">Module: All</option>
       <?php foreach ($modules as $m): ?>
-        <option value="<?= e($m) ?>" <?= $module === $m ? 'selected' : '' ?>>
-          <?= e($m) ?>
-        </option>
+        <option value="<?= e($m) ?>" <?= $module === $m ? 'selected' : '' ?>><?= e($m) ?></option>
       <?php endforeach; ?>
     </select>
 
     <select class="select" name="action" onchange="this.form.submit()">
       <option value="">Action: All</option>
       <?php foreach ($actions as $a): ?>
-        <option value="<?= e($a) ?>" <?= $action === $a ? 'selected' : '' ?>>
-          <?= e($a) ?>
-        </option>
+        <option value="<?= e($a) ?>" <?= $action === $a ? 'selected' : '' ?>><?= e($a) ?></option>
       <?php endforeach; ?>
     </select>
 
@@ -111,12 +90,8 @@ require_once __DIR__ . '/../includes/header.php';
     <table class="data">
       <thead>
         <tr>
-          <th>Date &amp; Time</th>
-          <th>Username</th>
-          <th>Role</th>
-          <th>Action</th>
-          <th>Module</th>
-          <th>Details</th>
+          <th>Date &amp; Time</th><th>Username</th><th>Role</th>
+          <th>Action</th><th>Module</th><th>Details</th>
         </tr>
       </thead>
       <tbody>

@@ -1,20 +1,27 @@
 <?php
+$u        = current_user();
+$isAdmin  = ($u['role'] ?? '') === 'admin';
+
 $nav = [
-  ['key'=>'dashboard',    'label'=>'Dashboard',       'icon'=>'🏠', 'url'=>'admin/dashboard.php'],
-  ['key'=>'products',     'label'=>'Products',        'icon'=>'📦', 'url'=>'admin/products.php'],
-  ['key'=>'inventory',    'label'=>'Inventory',       'icon'=>'📋', 'url'=>'admin/inventory.php'],
-  ['key'=>'expiry',       'label'=>'Expiry Alerts',   'icon'=>'⚠️', 'url'=>'admin/expiry-alerts.php'],
-  ['key'=>'orders',       'label'=>'Customer Orders', 'icon'=>'🧾', 'url'=>'admin/orders.php'],
-  ['key'=>'sales',        'label'=>'Sales',           'icon'=>'💡', 'url'=>'admin/sales.php'],
-  ['key'=>'customers',    'label'=>'Customers',       'icon'=>'👥', 'url'=>'admin/customers.php'],
-  ['key'=>'suppliers',    'label'=>'Suppliers',       'icon'=>'🏭', 'url'=>'admin/suppliers.php'],
-  ['key'=>'purchase',     'label'=>'Purchase Orders', 'icon'=>'📄', 'url'=>'admin/purchase-orders.php'],
-  ['key'=>'deliveries',   'label'=>'Deliveries',      'icon'=>'🚚', 'url'=>'admin/deliveries.php'],
-  ['key'=>'returns',      'label'=>'Returns',         'icon'=>'↩️', 'url'=>'admin/returns.php'],
-  ['key'=>'reports',      'label'=>'Reports',         'icon'=>'📊', 'url'=>'admin/reports.php'],
-  ['key'=>'users',        'label'=>'Users',           'icon'=>'👤', 'url'=>'admin/users.php'],
-  ['key'=>'audit',        'label'=>'Audit Logs',      'icon'=>'📜', 'url'=>'admin/audit-logs.php'],
+  ['key'=>'dashboard',  'label'=>'Dashboard',       'icon'=>'🏠', 'url'=>'admin/dashboard.php'],
+  ['key'=>'products',   'label'=>'Products',        'icon'=>'📦', 'url'=>'admin/products.php'],
+  ['key'=>'inventory',  'label'=>'Inventory',       'icon'=>'📋', 'url'=>'admin/inventory.php'],
+  ['key'=>'expiry',     'label'=>'Expiry Alerts',   'icon'=>'⚠️', 'url'=>'admin/expiry-alerts.php'],
+  ['key'=>'orders',     'label'=>'Customer Orders', 'icon'=>'🧾', 'url'=>'admin/orders.php'],
+  ['key'=>'sales',      'label'=>'Sales',           'icon'=>'💡', 'url'=>'admin/sales.php'],
+  ['key'=>'customers',  'label'=>'Customers',       'icon'=>'👥', 'url'=>'admin/customers.php'],
+  ['key'=>'suppliers',  'label'=>'Suppliers',       'icon'=>'🏭', 'url'=>'admin/suppliers.php'],
+  ['key'=>'purchase',   'label'=>'Purchase Orders', 'icon'=>'📄', 'url'=>'admin/purchase-orders.php'],
+  ['key'=>'deliveries', 'label'=>'Deliveries',      'icon'=>'🚚', 'url'=>'admin/deliveries.php'],
+  ['key'=>'returns',    'label'=>'Returns',         'icon'=>'↩️', 'url'=>'admin/returns.php'],
+  ['key'=>'reports',    'label'=>'Reports',         'icon'=>'📊', 'url'=>'admin/reports.php'],
 ];
+
+// Admin-only items
+if ($isAdmin) {
+    $nav[] = ['key'=>'users',  'label'=>'Users',      'icon'=>'👤', 'url'=>'admin/users.php'];
+    $nav[] = ['key'=>'audit',  'label'=>'Audit Logs', 'icon'=>'📜', 'url'=>'admin/audit-logs.php'];
+}
 ?>
 <aside class="sidebar">
   <div class="sidebar-brand">

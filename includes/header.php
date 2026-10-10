@@ -5,6 +5,22 @@ $u = current_user();
 $page_title = $page_title ?? 'Dashboard';
 $page_sub   = $page_sub ?? 'Mega Life Pharmacy Management System';
 $active     = $active ?? '';
+
+// Role display name
+$roleLabel = match ($u['role']) {
+    'admin'    => 'Owner',
+    'staff'    => 'Staff',
+    'customer' => 'Customer',
+    'supplier' => 'Supplier',
+    default    => 'User',
+};
+$roleSub = match ($u['role']) {
+    'admin'    => 'System Administrator',
+    'staff'    => 'System Staff',
+    'customer' => 'Customer Account',
+    'supplier' => 'Supplier Account',
+    default    => '',
+};
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -27,10 +43,10 @@ $active     = $active ?? '';
         <a href="<?= base_url('admin/settings.php') ?>" class="icon-btn" title="Settings">⚙️</a>
         <a href="<?= base_url('admin/notifications.php') ?>" class="icon-btn" title="Notifications">🔔<span class="badge-dot"></span></a>
         <div class="user-chip">
-          <div class="user-avatar"><?= strtoupper(substr($u['full_name'], 0, 1)) ?></div>
+          <div class="user-avatar"><?= strtoupper(substr($roleLabel, 0, 1)) ?></div>
           <div>
-            <div class="user-name"><?= e($u['full_name']) ?></div>
-            <div class="user-role"><?= e(ucfirst($u['role'])) ?></div>
+            <div class="user-name"><?= e($roleLabel) ?></div>
+            <div class="user-role"><?= e($roleSub) ?></div>
           </div>
         </div>
       </div>

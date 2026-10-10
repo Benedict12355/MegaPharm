@@ -1,7 +1,7 @@
 <?php
 // admin/suppliers.php
 require_once __DIR__ . '/../includes/functions.php';
-require_login();
+require_staff_or_admin();
 $active = 'suppliers';
 $page_title = 'Suppliers';
 
@@ -27,6 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('success', 'Supplier created.');
 
     } elseif ($act === 'update') {
+        if (!can('edit', 'suppliers')) {
+            flash('error', 'You do not have permission to edit suppliers.');
+            redirect(base_url('admin/suppliers.php'));
+        }
         $id = (int)$_POST['id'];
         db()->prepare('UPDATE suppliers 
             SET supplier_name=?, contact_person=?, phone=?, email=?, address=?, status=?
@@ -44,6 +48,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('success', 'Supplier updated.');
 
     } elseif ($act === 'delete') {
+        if (!can('delete', 'suppliers')) {
+            flash('error', 'You do not have permission to delete suppliers.');
+            redirect(base_url('admin/suppliers.php'));
+        }
         $id = (int)$_POST['id'];
         try {
             db()->prepare('DELETE FROM suppliers WHERE id=?')->execute([$id]);
@@ -56,7 +64,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect(base_url('admin/suppliers.php' . qs()));
 }
 
-/* ---------- FILTERS ---------- */
 $q      = trim($_GET['q'] ?? '');
 $status = $_GET['status'] ?? '';
 
@@ -131,16 +138,22 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <div class="supplier-foot" style="display:flex;justify-content:space-between;align-items:center">
           <span><?= e($s['supplier_code']) ?></span>
+          <?php if (can('edit', 'suppliers') || can('delete', 'suppliers')): ?>
           <span class="row-actions">
-            <button class="btn-icon" title="Edit"
-                    onclick='editSupplier(<?= json_encode($s, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>✏️</button>
-            <form method="post" style="display:inline" onsubmit="return confirm('Delete this supplier?')">
-              <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-              <input type="hidden" name="act" value="delete">
-              <input type="hidden" name="id" value="<?= $s['id'] ?>">
-              <button class="btn-icon danger" title="Delete">🗑️</button>
-            </form>
+            <?php if (can('edit', 'suppliers')): ?>
+              <button class="btn-icon" title="Edit"
+                      onclick='editSupplier(<?= json_encode($s, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>✏️</button>
+            <?php endif; ?>
+            <?php if (can('delete', 'suppliers')): ?>
+              <form method="post" style="display:inline" onsubmit="return confirm('Delete this supplier?')">
+                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                <input type="hidden" name="act" value="delete">
+                <input type="hidden" name="id" value="<?= $s['id'] ?>">
+                <button class="btn-icon danger" title="Delete">🗑️</button>
+              </form>
+            <?php endif; ?>
           </span>
+          <?php endif; ?>
         </div>
       </div>
     <?php endforeach; ?>
@@ -156,16 +169,11 @@ require_once __DIR__ . '/../includes/header.php';
       <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
       <input type="hidden" name="act" value="create">
       <div class="form-grid">
-        <div class="field"><label>Supplier Name <span class="req">*</span></label>
-          <input name="supplier_name" required></div>
-        <div class="field"><label>Email Address</label>
-          <input name="email" type="email"></div>
-        <div class="field"><label>Contact Person</label>
-          <input name="contact_person"></div>
-        <div class="field"><label>Address</label>
-          <input name="address"></div>
-        <div class="field"><label>Contact No.</label>
-          <input name="phone"></div>
+        <div class="field"><label>Supplier Name <span class="req">*</span></label><input name="supplier_name" required></div>
+        <div class="field"><label>Email Address</label><input name="email" type="email"></div>
+        <div class="field"><label>Contact Person</label><input name="contact_person"></div>
+        <div class="field"><label>Address</label><input name="address"></div>
+        <div class="field"><label>Contact No.</label><input name="phone"></div>
         <div class="field"><label>Status</label>
           <select name="status">
             <option value="active">Active</option>
@@ -191,16 +199,11 @@ require_once __DIR__ . '/../includes/header.php';
       <input type="hidden" name="act" value="update">
       <input type="hidden" name="id" id="es-id">
       <div class="form-grid">
-        <div class="field"><label>Supplier Name</label>
-          <input name="supplier_name" id="es-name" required></div>
-        <div class="field"><label>Email Address</label>
-          <input name="email" id="es-email" type="email"></div>
-        <div class="field"><label>Contact Person</label>
-          <input name="contact_person" id="es-contact"></div>
-        <div class="field"><label>Address</label>
-          <input name="address" id="es-address"></div>
-        <div class="field"><label>Contact No.</label>
-          <input name="phone" id="es-phone"></div>
+        <div class="field"><label>Supplier Name</label><input name="supplier_name" id="es-name" required></div>
+        <div class="field"><label>Email Address</label><input name="email" id="es-email" type="email"></div>
+        <div class="field"><label>Contact Person</label><input name="contact_person" id="es-contact"></div>
+        <div class="field"><label>Address</label><input name="address" id="es-address"></div>
+        <div class="field"><label>Contact No.</label><input name="phone" id="es-phone"></div>
         <div class="field"><label>Status</label>
           <select name="status" id="es-status">
             <option value="active">Active</option>

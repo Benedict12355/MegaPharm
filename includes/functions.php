@@ -37,8 +37,54 @@ function require_role(string ...$roles): void {
     $u = current_user();
     if (!in_array($u['role'], $roles, true)) {
         http_response_code(403);
+        die('Access denied. This page requires role: ' . implode(' or ', $roles));
+    }
+}
+
+function require_staff_or_admin(): void {
+    require_login();
+    $u = current_user();
+    if (!in_array($u['role'], ['admin', 'staff'], true)) {
+        http_response_code(403);
         die('Access denied.');
     }
+}
+
+/**
+ * Role-based permission checker.
+ * Usage: if (can('delete', 'products')) { ... }
+ */
+function can(string $action, ?string $resource = null): bool {
+    $u = current_user();
+    if (!$u) return false;
+    $role = $u['role'];
+
+    if ($role === 'admin') return true;
+
+    if ($role === 'staff') {
+        // Admin-only modules
+        if (in_array($resource, ['users', 'audit_logs', 'system_settings'], true)) {
+            return false;
+        }
+        // Destructive actions blocked
+        if ($action === 'delete') return false;
+        if ($resource === 'suppliers' && in_array($action, ['edit', 'delete'], true)) return false;
+        if ($resource === 'sales'     && in_array($action, ['void', 'refund'], true)) return false;
+        if ($resource === 'purchase_orders' && $action === 'approve') return false;
+        return true;
+    }
+
+    return false;
+}
+
+function is_admin(): bool {
+    $u = current_user();
+    return $u && $u['role'] === 'admin';
+}
+
+function is_staff(): bool {
+    $u = current_user();
+    return $u && $u['role'] === 'staff';
 }
 
 function csrf_token(): string {
@@ -105,30 +151,25 @@ function notify_admins(string $type, string $title, string $message, ?string $re
 
 /**
  * Build a WHERE clause fragment + params array from common filter inputs.
- * Usage:
- *   [$where, $params] = build_product_filters($_GET, ['p', 'b']);
  */
 function build_product_filters(array $get, array $aliases = []): array {
-    $p = $aliases[0] ?? 'p'; // product table alias
-    $b = $aliases[1] ?? 'b'; // batch table alias (may be unused)
+    $p = $aliases[0] ?? 'p';
+    $b = $aliases[1] ?? 'b';
 
     $where  = ' WHERE 1=1';
     $params = [];
 
-    // Search
     if (!empty($get['q'])) {
         $where .= " AND ($p.product_name LIKE ? OR $p.generic_name LIKE ? OR $p.product_code LIKE ? OR $p.brand LIKE ?)";
         $s = '%' . $get['q'] . '%';
         array_push($params, $s, $s, $s, $s);
     }
 
-    // Category (specific category_id)
     if (!empty($get['cat']) && ctype_digit((string)$get['cat'])) {
         $where .= " AND $p.category_id = ?";
         $params[] = (int)$get['cat'];
     }
 
-    // Type filter: medicines / cosmetics / milks
     if (!empty($get['type'])) {
         switch ($get['type']) {
             case 'medicines':
@@ -143,13 +184,11 @@ function build_product_filters(array $get, array $aliases = []): array {
         }
     }
 
-    // Age group: adult / kid / infant
     if (!empty($get['age'])) {
         $where .= " AND $p.age_group = ?";
         $params[] = $get['age'];
     }
 
-    // Status: active / inactive
     if (!empty($get['status'])) {
         if ($get['status'] === 'active' || $get['status'] === 'inactive') {
             $where .= " AND $p.status = ?";
@@ -161,7 +200,7 @@ function build_product_filters(array $get, array $aliases = []): array {
 }
 
 /**
- * Returns a stock status string: 'low', 'out', 'normal'
+ * Returns 'low' | 'out' | 'normal'
  */
 function stock_status(int $qty, int $reorder): string {
     if ($qty <= 0) return 'out';

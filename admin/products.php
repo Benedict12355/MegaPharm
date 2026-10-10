@@ -1,11 +1,10 @@
 <?php
 // admin/products.php
 require_once __DIR__ . '/../includes/functions.php';
-require_login();
+require_staff_or_admin();
 $active = 'products';
 $page_title = 'Products';
 
-/* ---------- POST ACTIONS ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? '');
     $act = $_POST['act'] ?? '';
@@ -46,7 +45,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 VALUES (?,?,?,?,?,?)')
                ->execute([$pid, $bid, $u['id'], 'stock_in', $qty, 'Initial stock']);
         }
-
         audit('Add', 'Product', "Created {$_POST['product_name']}");
         flash('success', 'Product added successfully.');
 
@@ -74,6 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('success', 'Product updated.');
 
     } elseif ($act === 'delete') {
+        // 🔒 Only admins can delete
+        if (!can('delete', 'products')) {
+            flash('error', 'You do not have permission to delete products.');
+            redirect(base_url('admin/products.php'));
+        }
         $id = (int)$_POST['id'];
         try {
             db()->prepare('DELETE FROM products WHERE id=?')->execute([$id]);
@@ -86,7 +89,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect(base_url('admin/products.php' . qs()));
 }
 
-/* ---------- FILTERS ---------- */
 $q      = trim($_GET['q'] ?? '');
 $cat    = $_GET['cat'] ?? '';
 $type   = $_GET['type'] ?? '';
@@ -131,7 +133,6 @@ $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $products = $stmt->fetchAll();
 
-/* ---------- STAT COUNTS ---------- */
 $statTotal     = (int)db()->query("SELECT COUNT(*) FROM products WHERE status='active'")->fetchColumn();
 $statMedicines = (int)db()->query("SELECT COUNT(*) FROM products p LEFT JOIN categories c ON c.id=p.category_id WHERE p.status='active' AND (c.category_name NOT IN ('Cosmetics','Milks') OR c.id IS NULL)")->fetchColumn();
 $statCosmetics = (int)db()->query("SELECT COUNT(*) FROM products p JOIN categories c ON c.id=p.category_id WHERE p.status='active' AND c.category_name='Cosmetics'")->fetchColumn();
@@ -201,14 +202,8 @@ require_once __DIR__ . '/../includes/header.php';
     <table class="data">
       <thead>
         <tr>
-          <th>Product</th>
-          <th>Category</th>
-          <th>Age</th>
-          <th>Price (₱)</th>
-          <th>Stock</th>
-          <th>Expiry</th>
-          <th>Status</th>
-          <th>Actions</th>
+          <th>Product</th><th>Category</th><th>Age</th><th>Price (₱)</th>
+          <th>Stock</th><th>Expiry</th><th>Status</th><th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -236,12 +231,14 @@ require_once __DIR__ . '/../includes/header.php';
           <td class="row-actions">
             <button class="btn-icon" title="Edit"
                     onclick='editProduct(<?= json_encode($p, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>✏️</button>
-            <form method="post" style="display:inline" onsubmit="return confirm('Delete this product?')">
-              <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-              <input type="hidden" name="act" value="delete">
-              <input type="hidden" name="id" value="<?= $p['id'] ?>">
-              <button class="btn-icon danger" title="Delete">🗑️</button>
-            </form>
+            <?php if (can('delete', 'products')): ?>
+              <form method="post" style="display:inline" onsubmit="return confirm('Delete this product?')">
+                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                <input type="hidden" name="act" value="delete">
+                <input type="hidden" name="id" value="<?= $p['id'] ?>">
+                <button class="btn-icon danger" title="Delete">🗑️</button>
+              </form>
+            <?php endif; ?>
           </td>
         </tr>
       <?php endforeach; ?>
@@ -259,16 +256,9 @@ require_once __DIR__ . '/../includes/header.php';
       <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
       <input type="hidden" name="act" value="create">
       <div class="form-grid">
-
-        <div class="field"><label>Product Name <span class="req">*</span></label>
-          <input name="product_name" required></div>
-
-        <div class="field"><label>Generic Name</label>
-          <input name="generic_name"></div>
-
-        <div class="field"><label>Brand</label>
-          <input name="brand"></div>
-
+        <div class="field"><label>Product Name <span class="req">*</span></label><input name="product_name" required></div>
+        <div class="field"><label>Generic Name</label><input name="generic_name"></div>
+        <div class="field"><label>Brand</label><input name="brand"></div>
         <div class="field"><label>Category <span class="req">*</span></label>
           <select name="category_id" required>
             <option value="">Select...</option>
@@ -277,7 +267,6 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
           </select>
         </div>
-
         <div class="field"><label>Age Group <span class="req">*</span></label>
           <select name="age_group" required>
             <option value="all_ages">All Ages</option>
@@ -286,7 +275,6 @@ require_once __DIR__ . '/../includes/header.php';
             <option value="infant">Infants</option>
           </select>
         </div>
-
         <div class="field"><label>Supplier</label>
           <select name="supplier_id">
             <option value="">Select supplier...</option>
@@ -295,29 +283,15 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
           </select>
         </div>
-
-        <div class="field"><label>Batch No.</label>
-          <input name="batch_number" placeholder="Auto if blank"></div>
-
-        <div class="field"><label>Quantity <span class="req">*</span></label>
-          <input name="quantity" type="number" value="0" required></div>
-
-        <div class="field"><label>Reorder Level <span class="req">*</span></label>
-          <input name="reorder_level" type="number" value="20" required></div>
-
-        <div class="field"><label>Purchase Price (₱)</label>
-          <input name="purchase_price" type="number" step="0.01" value="0"></div>
-
-        <div class="field"><label>Selling Price (₱) <span class="req">*</span></label>
-          <input name="selling_price" type="number" step="0.01" value="0" required></div>
-
-        <div class="field"><label>Expiry Date</label>
-          <input name="expiry_date" type="date"></div>
-
+        <div class="field"><label>Batch No.</label><input name="batch_number" placeholder="Auto if blank"></div>
+        <div class="field"><label>Quantity <span class="req">*</span></label><input name="quantity" type="number" value="0" required></div>
+        <div class="field"><label>Reorder Level <span class="req">*</span></label><input name="reorder_level" type="number" value="20" required></div>
+        <div class="field"><label>Purchase Price (₱)</label><input name="purchase_price" type="number" step="0.01" value="0"></div>
+        <div class="field"><label>Selling Price (₱) <span class="req">*</span></label><input name="selling_price" type="number" step="0.01" value="0" required></div>
+        <div class="field"><label>Expiry Date</label><input name="expiry_date" type="date"></div>
         <div class="field full">
           <label style="display:flex;gap:8px;align-items:center">
-            <input type="checkbox" name="requires_prescription" value="1" style="width:auto"> 
-            Requires prescription
+            <input type="checkbox" name="requires_prescription" value="1" style="width:auto"> Requires prescription
           </label>
         </div>
       </div>
@@ -339,16 +313,9 @@ require_once __DIR__ . '/../includes/header.php';
       <input type="hidden" name="act" value="update">
       <input type="hidden" name="id" id="ep-id">
       <div class="form-grid">
-
-        <div class="field"><label>Product Name</label>
-          <input name="product_name" id="ep-name" required></div>
-
-        <div class="field"><label>Generic Name</label>
-          <input name="generic_name" id="ep-gen"></div>
-
-        <div class="field"><label>Brand</label>
-          <input name="brand" id="ep-brand"></div>
-
+        <div class="field"><label>Product Name</label><input name="product_name" id="ep-name" required></div>
+        <div class="field"><label>Generic Name</label><input name="generic_name" id="ep-gen"></div>
+        <div class="field"><label>Brand</label><input name="brand" id="ep-brand"></div>
         <div class="field"><label>Category</label>
           <select name="category_id" id="ep-cat">
             <option value="">Select...</option>
@@ -357,7 +324,6 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
           </select>
         </div>
-
         <div class="field"><label>Age Group</label>
           <select name="age_group" id="ep-age">
             <option value="all_ages">All Ages</option>
@@ -366,27 +332,18 @@ require_once __DIR__ . '/../includes/header.php';
             <option value="infant">Infants</option>
           </select>
         </div>
-
-        <div class="field"><label>Reorder Level</label>
-          <input name="reorder_level" id="ep-reorder" type="number"></div>
-
-        <div class="field"><label>Purchase Price</label>
-          <input name="purchase_price" id="ep-pp" type="number" step="0.01"></div>
-
-        <div class="field"><label>Selling Price</label>
-          <input name="selling_price" id="ep-sp" type="number" step="0.01"></div>
-
+        <div class="field"><label>Reorder Level</label><input name="reorder_level" id="ep-reorder" type="number"></div>
+        <div class="field"><label>Purchase Price</label><input name="purchase_price" id="ep-pp" type="number" step="0.01"></div>
+        <div class="field"><label>Selling Price</label><input name="selling_price" id="ep-sp" type="number" step="0.01"></div>
         <div class="field"><label>Status</label>
           <select name="status" id="ep-status">
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
         </div>
-
         <div class="field full">
           <label style="display:flex;gap:8px;align-items:center">
-            <input type="checkbox" name="requires_prescription" id="ep-rx" value="1" style="width:auto"> 
-            Requires prescription
+            <input type="checkbox" name="requires_prescription" id="ep-rx" value="1" style="width:auto"> Requires prescription
           </label>
         </div>
       </div>

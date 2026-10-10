@@ -1,7 +1,7 @@
 <?php
 // admin/users.php
 require_once __DIR__ . '/../includes/functions.php';
-require_role('admin');
+require_role('admin');   // ← Staff blocked here
 $active = 'users';
 $page_title = 'Users';
 
@@ -31,15 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } elseif ($act === 'update') {
         $id = (int)$_POST['id'];
-        $fields = [
-            'full_name' => trim($_POST['full_name']),
-            'email'     => trim($_POST['email']),
-            'role'      => $_POST['role'],
-            'status'    => $_POST['status'],
-        ];
-
         $sql = 'UPDATE users SET full_name=?, email=?, role=?, status=?';
-        $params = array_values($fields);
+        $params = [
+            trim($_POST['full_name']),
+            trim($_POST['email']),
+            $_POST['role'],
+            $_POST['status'],
+        ];
 
         if (!empty($_POST['password'])) {
             $sql .= ', password_hash=?';
@@ -146,13 +144,8 @@ require_once __DIR__ . '/../includes/header.php';
     <table class="data">
       <thead>
         <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Role</th>
-          <th>Status</th>
-          <th>Date Created</th>
-          <th>Actions</th>
+          <th>ID</th><th>Name</th><th>Email</th><th>Role</th>
+          <th>Status</th><th>Date Created</th><th>Actions</th>
         </tr>
       </thead>
       <tbody>
