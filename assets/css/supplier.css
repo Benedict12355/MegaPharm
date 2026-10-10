@@ -1,0 +1,190 @@
+/* Supplier Portal — reuses admin style.css + small tweaks */
+
+/* KPI stat cards with icons on the right (matches screenshots) */
+.stat.stat-icon-right {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.stat-icon-right .stat-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: #e0edff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+/* Dashboard notification panel */
+.notif-panel {
+  background: #fff;
+  border: 1px solid #e5e9f2;
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.notif-item {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.notif-item:last-child { border-bottom: 0; }
+.notif-item .notif-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.notif-item .notif-body { flex: 1; }
+.notif-item .notif-title { font-weight: 700; font-size: 13px; margin: 0 0 3px; }
+.notif-item .notif-text  { font-size: 12px; color: #64748b; margin: 0 0 4px; line-height: 1.5; }
+.notif-item .notif-time  { font-size: 11px; color: #94a3b8; }
+
+/* Chat / Messages */
+.chat-wrap {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 0;
+  background: #fff;
+  border: 1px solid #e5e9f2;
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 600px;
+}
+.chat-side { border-right: 1px solid #e5e9f2; background: #f8fafc; }
+.chat-side h3 { padding: 18px 20px 10px; margin: 0; font-size: 15px; }
+.chat-conv {
+  padding: 14px 20px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: .15s;
+}
+.chat-conv:hover { background: #eff6ff; }
+.chat-conv.active { background: #eff6ff; border-left-color: #2563eb; }
+.chat-conv .conv-name { font-weight: 700; font-size: 13px; margin: 0 0 3px; }
+.chat-conv .conv-msg  { font-size: 12px; color: #64748b; margin: 0 0 3px; line-height: 1.4; }
+.chat-conv .conv-time { font-size: 11px; color: #94a3b8; }
+
+.chat-main { display: flex; flex-direction: column; }
+.chat-header { padding: 16px 22px; border-bottom: 1px solid #e5e9f2; }
+.chat-header h3 { margin: 0 0 2px; font-size: 15px; }
+.chat-header p { margin: 0; font-size: 12px; color: #64748b; }
+
+.chat-body { flex: 1; padding: 22px; overflow-y: auto; background: #f8fafc; }
+.chat-msg {
+  max-width: 60%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  position: relative;
+}
+.chat-msg.in  { background: #e5e9f2; color: #0f172a; }
+.chat-msg.out { background: #2563eb; color: #fff; margin-left: auto; }
+.chat-msg .chat-time { font-size: 10px; margin-top: 6px; opacity: .7; }
+
+.chat-input {
+  display: flex;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #e5e9f2;
+  background: #fff;
+}
+.chat-input input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 1px solid #e5e9f2;
+  border-radius: 24px;
+  font-size: 13px;
+  outline: none;
+}
+.chat-input button {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+/* PO Details table (screenshot #4) */
+.po-details-card {
+  background: #fff;
+  border: 1px solid #e5e9f2;
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+}
+.po-details-card h3 {
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e9f2;
+  font-size: 17px;
+}
+.po-details-card p { margin: 5px 0; font-size: 13px; }
+.po-details-card p b { display: inline-block; min-width: 110px; }
+
+.po-lines {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+.po-lines th {
+  background: #f1f5f9;
+  text-align: left;
+  padding: 12px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.po-lines td {
+  padding: 14px;
+  border-bottom: 1px solid #e5e9f2;
+  font-size: 13px;
+}
+.po-totals { text-align: right; margin-top: 14px; }
+.po-totals div { padding: 4px 0; font-size: 13px; }
+.po-totals .grand { font-weight: 700; font-size: 15px; padding-top: 10px; }
+
+.po-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding: 22px;
+  border-top: 1px solid #e5e9f2;
+  margin-top: 18px;
+}
+
+/* Notification dot (blue circle on right) */
+.notif-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2563eb;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+/* Status colors for supplier portal */
+.status-ready       { color: #16a34a; font-weight: 600; }
+.status-processing  { color: #2563eb; font-weight: 600; }
+.status-delivered   { color: #16a34a; font-weight: 600; }
+.status-cancelled   { color: #dc2626; font-weight: 600; }
+.status-pending     { color: #f59e0b; font-weight: 600; }
+.status-paid        { color: #16a34a; font-weight: 600; }
+.status-overdue     { color: #dc2626; font-weight: 600; }
+.status-scheduled   { color: #f59e0b; font-weight: 600; }
+.status-in-transit  { color: #2563eb; font-weight: 600; }
