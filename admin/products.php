@@ -5,6 +5,7 @@ require_staff_or_admin();
 $active = 'products';
 $page_title = 'Products';
 
+/* ---------- POST ACTIONS ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? '');
     $act = $_POST['act'] ?? '';
@@ -26,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             (float)($_POST['purchase_price'] ?? 0),
             (int)$_POST['reorder_level'],
             isset($_POST['requires_prescription']) ? 1 : 0,
-            $_POST['status'] ?? 'active',
+            'active',
         ]);
         $pid = (int)db()->lastInsertId();
 
@@ -72,7 +73,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('success', 'Product updated.');
 
     } elseif ($act === 'delete') {
-        // 🔒 Only admins can delete
         if (!can('delete', 'products')) {
             flash('error', 'You do not have permission to delete products.');
             redirect(base_url('admin/products.php'));
@@ -89,10 +89,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect(base_url('admin/products.php' . qs()));
 }
 
+/* ---------- FILTERS ---------- */
 $q      = trim($_GET['q'] ?? '');
 $cat    = $_GET['cat'] ?? '';
 $type   = $_GET['type'] ?? '';
-$age    = $_GET['age'] ?? '';
 $status = $_GET['status'] ?? '';
 
 $sql = "SELECT p.*, c.category_name,
@@ -119,10 +119,6 @@ if ($type === 'medicines') {
 } elseif ($type === 'milks') {
     $sql .= " AND c.category_name = 'Milks'";
 }
-if ($age !== '') {
-    $sql .= " AND p.age_group = ?";
-    $params[] = $age;
-}
 if ($status === 'active' || $status === 'inactive') {
     $sql .= " AND p.status = ?";
     $params[] = $status;
@@ -133,6 +129,7 @@ $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $products = $stmt->fetchAll();
 
+/* ---------- STATS ---------- */
 $statTotal     = (int)db()->query("SELECT COUNT(*) FROM products WHERE status='active'")->fetchColumn();
 $statMedicines = (int)db()->query("SELECT COUNT(*) FROM products p LEFT JOIN categories c ON c.id=p.category_id WHERE p.status='active' AND (c.category_name NOT IN ('Cosmetics','Milks') OR c.id IS NULL)")->fetchColumn();
 $statCosmetics = (int)db()->query("SELECT COUNT(*) FROM products p JOIN categories c ON c.id=p.category_id WHERE p.status='active' AND c.category_name='Cosmetics'")->fetchColumn();
@@ -144,6 +141,7 @@ require_once __DIR__ . '/../includes/header.php';
 ?>
 <h1 style="display:none">Products</h1>
 
+<!-- STAT CARDS -->
 <div class="stats">
   <div class="stat"><div class="stat-label">Total Products</div><div class="stat-value"><?= $statTotal ?></div></div>
   <div class="stat"><div class="stat-label">Medicines</div><div class="stat-value"><?= $statMedicines ?></div></div>
@@ -152,41 +150,28 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <div class="card">
+  <!-- FILTER TABS + SEARCH -->
   <form method="get" class="toolbar">
     <div class="search grow">
       <input class="input" name="q" placeholder="Search product..."
              value="<?= e($q) ?>" style="width:100%">
     </div>
 
-    <select class="select" name="cat" onchange="this.form.submit()">
-      <option value="">All Categories</option>
-      <?php foreach ($categories as $c): ?>
-        <option value="<?= $c['id'] ?>" <?= $cat == $c['id'] ? 'selected' : '' ?>>
-          <?= e($c['category_name']) ?>
-        </option>
-      <?php endforeach; ?>
-    </select>
-
-    <select class="select" name="type" onchange="this.form.submit()">
-      <option value="">All Types</option>
-      <option value="medicines" <?= $type === 'medicines' ? 'selected' : '' ?>>Medicines</option>
-      <option value="cosmetics" <?= $type === 'cosmetics' ? 'selected' : '' ?>>Cosmetics</option>
-      <option value="milks"     <?= $type === 'milks'     ? 'selected' : '' ?>>Milks</option>
-    </select>
-
-    <select class="select" name="status" onchange="this.form.submit()">
-      <option value="">All Status</option>
-      <option value="active"   <?= $status === 'active'   ? 'selected' : '' ?>>Active</option>
-      <option value="inactive" <?= $status === 'inactive' ? 'selected' : '' ?>>Inactive</option>
-    </select>
-
-    <?php if ($q || $cat || $type || $age || $status): ?>
-      <a class="btn" href="<?= base_url('admin/products.php') ?>">Reset</a>
-    <?php endif; ?>
+    <div class="tabs">
+      <a class="tab <?= !$type ? 'active' : '' ?>"
+         href="<?= base_url('admin/products.php' . qs(['type' => ''])) ?>">All products</a>
+      <a class="tab <?= $type === 'medicines' ? 'active' : '' ?>"
+         href="<?= base_url('admin/products.php' . qs(['type' => 'medicines'])) ?>">Medicines</a>
+      <a class="tab <?= $type === 'cosmetics' ? 'active' : '' ?>"
+         href="<?= base_url('admin/products.php' . qs(['type' => 'cosmetics'])) ?>">Cosmetics</a>
+      <a class="tab <?= $type === 'milks' ? 'active' : '' ?>"
+         href="<?= base_url('admin/products.php' . qs(['type' => 'milks'])) ?>">Milks</a>
+    </div>
 
     <button class="btn btn-primary" type="button" onclick="openModal('addProduct')">➕ Add product</button>
   </form>
 
+  <!-- CATEGORY PILLS -->
   <div class="pills">
     <a class="pill <?= $cat === '' ? 'active' : '' ?>"
        href="<?= base_url('admin/products.php' . qs(['cat' => ''])) ?>">All</a>
@@ -198,46 +183,40 @@ require_once __DIR__ . '/../includes/header.php';
     <?php endforeach; ?>
   </div>
 
+  <!-- ⬇ SIMPLIFIED TABLE: Name | Price | Stock | Expiry | Action -->
   <div class="table-wrap" style="border:0">
     <table class="data">
       <thead>
         <tr>
-          <th>Product</th><th>Category</th><th>Age</th><th>Price (₱)</th>
-          <th>Stock</th><th>Expiry</th><th>Status</th><th>Actions</th>
+          <th>Name</th>
+          <th>Price (₱)</th>
+          <th>Stock</th>
+          <th>Expiry</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
       <?php if (!$products): ?>
-        <tr><td colspan="8" class="empty">No products match your filters.</td></tr>
+        <tr><td colspan="5" class="empty">No products match your filters.</td></tr>
       <?php endif; ?>
-      <?php foreach ($products as $p):
-        $st = stock_status((int)$p['stock'], (int)$p['reorder_level']);
-        $statusLabel = $st === 'low' ? 'Low Stock' : ($st === 'out' ? 'Out of Stock' : 'Normal');
-        $statusCls   = $st === 'normal' ? 'status-ok' : 'status-low';
-      ?>
+      <?php foreach ($products as $p): ?>
         <tr>
-          <td>
-            <div style="font-weight:600"><?= e($p['product_name']) ?></div>
-            <?php if ($p['brand']): ?>
-              <div class="text-muted" style="font-size:11px"><?= e($p['brand']) ?></div>
-            <?php endif; ?>
-          </td>
-          <td><?= e($p['category_name'] ?? '—') ?></td>
-          <td><?= e(ucfirst(str_replace('_',' ', $p['age_group']))) ?></td>
+          <td><?= e($p['product_name']) ?></td>
           <td><?= peso($p['selling_price']) ?></td>
           <td><?= (int)$p['stock'] ?></td>
           <td><?= $p['expiry'] ? e(date('Y-m-d', strtotime($p['expiry']))) : '—' ?></td>
-          <td class="<?= $statusCls ?>"><?= $statusLabel ?></td>
           <td class="row-actions">
-            <button class="btn-icon" title="Edit"
-                    onclick='editProduct(<?= json_encode($p, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>✏️</button>
-            <?php if (can('delete', 'products')): ?>
+            <?php if (is_admin()): ?>
+              <button class="btn-icon" title="Edit"
+                      onclick='editProduct(<?= json_encode($p, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>✏️</button>
               <form method="post" style="display:inline" onsubmit="return confirm('Delete this product?')">
                 <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
                 <input type="hidden" name="act" value="delete">
                 <input type="hidden" name="id" value="<?= $p['id'] ?>">
                 <button class="btn-icon danger" title="Delete">🗑️</button>
               </form>
+            <?php else: ?>
+              <button class="btn btn-sm">View</button>
             <?php endif; ?>
           </td>
         </tr>
@@ -245,6 +224,10 @@ require_once __DIR__ . '/../includes/header.php';
       </tbody>
     </table>
   </div>
+
+  <p class="text-muted" style="padding:12px 16px">
+    Showing 1 to <?= count($products) ?> of <?= count($products) ?> product
+  </p>
 </div>
 
 <!-- ============ MODAL: ADD PRODUCT ============ -->
@@ -256,9 +239,8 @@ require_once __DIR__ . '/../includes/header.php';
       <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
       <input type="hidden" name="act" value="create">
       <div class="form-grid">
-        <div class="field"><label>Product Name <span class="req">*</span></label><input name="product_name" required></div>
+        <div class="field"><label>Brand Name <span class="req">*</span></label><input name="product_name" required></div>
         <div class="field"><label>Generic Name</label><input name="generic_name"></div>
-        <div class="field"><label>Brand</label><input name="brand"></div>
         <div class="field"><label>Category <span class="req">*</span></label>
           <select name="category_id" required>
             <option value="">Select...</option>
@@ -267,33 +249,18 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="field"><label>Age Group <span class="req">*</span></label>
-          <select name="age_group" required>
-            <option value="all_ages">All Ages</option>
-            <option value="adult">Adults</option>
-            <option value="kid">Kids</option>
-            <option value="infant">Infants</option>
-          </select>
-        </div>
+        <div class="field"><label>Reorder Level <span class="req">*</span></label><input name="reorder_level" type="number" value="20" required></div>
+        <div class="field"><label>Quantity <span class="req">*</span></label><input name="quantity" type="number" value="0" required></div>
         <div class="field"><label>Supplier</label>
           <select name="supplier_id">
-            <option value="">Select supplier...</option>
+            <option value="">Select...</option>
             <?php foreach (db()->query('SELECT id, supplier_name FROM suppliers WHERE status="active" ORDER BY supplier_name') as $s): ?>
               <option value="<?= $s['id'] ?>"><?= e($s['supplier_name']) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="field"><label>Batch No.</label><input name="batch_number" placeholder="Auto if blank"></div>
-        <div class="field"><label>Quantity <span class="req">*</span></label><input name="quantity" type="number" value="0" required></div>
-        <div class="field"><label>Reorder Level <span class="req">*</span></label><input name="reorder_level" type="number" value="20" required></div>
-        <div class="field"><label>Purchase Price (₱)</label><input name="purchase_price" type="number" step="0.01" value="0"></div>
-        <div class="field"><label>Selling Price (₱) <span class="req">*</span></label><input name="selling_price" type="number" step="0.01" value="0" required></div>
+        <div class="field"><label>Unit Price (₱)</label><input name="selling_price" type="number" step="0.01" value="0" required></div>
         <div class="field"><label>Expiry Date</label><input name="expiry_date" type="date"></div>
-        <div class="field full">
-          <label style="display:flex;gap:8px;align-items:center">
-            <input type="checkbox" name="requires_prescription" value="1" style="width:auto"> Requires prescription
-          </label>
-        </div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-light" onclick="closeModal('addProduct')">Cancel</button>
@@ -324,14 +291,6 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="field"><label>Age Group</label>
-          <select name="age_group" id="ep-age">
-            <option value="all_ages">All Ages</option>
-            <option value="adult">Adults</option>
-            <option value="kid">Kids</option>
-            <option value="infant">Infants</option>
-          </select>
-        </div>
         <div class="field"><label>Reorder Level</label><input name="reorder_level" id="ep-reorder" type="number"></div>
         <div class="field"><label>Purchase Price</label><input name="purchase_price" id="ep-pp" type="number" step="0.01"></div>
         <div class="field"><label>Selling Price</label><input name="selling_price" id="ep-sp" type="number" step="0.01"></div>
@@ -340,11 +299,6 @@ require_once __DIR__ . '/../includes/header.php';
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
-        </div>
-        <div class="field full">
-          <label style="display:flex;gap:8px;align-items:center">
-            <input type="checkbox" name="requires_prescription" id="ep-rx" value="1" style="width:auto"> Requires prescription
-          </label>
         </div>
       </div>
       <div class="modal-actions">
@@ -357,17 +311,15 @@ require_once __DIR__ . '/../includes/header.php';
 
 <script>
 function editProduct(p) {
-  document.getElementById('ep-id').value       = p.id;
-  document.getElementById('ep-name').value     = p.product_name || '';
-  document.getElementById('ep-gen').value      = p.generic_name || '';
-  document.getElementById('ep-brand').value    = p.brand || '';
-  document.getElementById('ep-cat').value      = p.category_id || '';
-  document.getElementById('ep-age').value      = p.age_group || 'all_ages';
-  document.getElementById('ep-reorder').value  = p.reorder_level || 0;
-  document.getElementById('ep-pp').value       = p.purchase_price || 0;
-  document.getElementById('ep-sp').value       = p.selling_price || 0;
-  document.getElementById('ep-status').value   = p.status || 'active';
-  document.getElementById('ep-rx').checked     = p.requires_prescription == 1;
+  document.getElementById('ep-id').value      = p.id;
+  document.getElementById('ep-name').value    = p.product_name || '';
+  document.getElementById('ep-gen').value     = p.generic_name || '';
+  document.getElementById('ep-brand').value   = p.brand || '';
+  document.getElementById('ep-cat').value     = p.category_id || '';
+  document.getElementById('ep-reorder').value = p.reorder_level || 0;
+  document.getElementById('ep-pp').value      = p.purchase_price || 0;
+  document.getElementById('ep-sp').value      = p.selling_price || 0;
+  document.getElementById('ep-status').value  = p.status || 'active';
   openModal('editProduct');
 }
 </script>

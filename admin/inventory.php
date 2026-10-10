@@ -1,7 +1,7 @@
 <?php
 // admin/inventory.php
 require_once __DIR__ . '/../includes/functions.php';
-require_login();
+require_staff_or_admin();
 $active = 'inventory';
 $page_title = 'Inventory';
 
@@ -69,11 +69,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             trim($_POST['generic_name'] ?? ''),
             trim($_POST['brand'] ?? ''),
             (int)$_POST['category_id'] ?: null,
-            $_POST['age_group'] ?? 'all_ages',
+            'all_ages',
             (float)$_POST['selling_price'],
             (float)($_POST['purchase_price'] ?? 0),
             (int)$_POST['reorder_level'],
-            isset($_POST['requires_prescription']) ? 1 : 0,
+            0,
             'active',
         ]);
         $pid = (int)db()->lastInsertId();
@@ -97,14 +97,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* ---------- FILTERS ---------- */
 $q      = trim($_GET['q'] ?? '');
 $cat    = $_GET['cat']    ?? '';
-$type   = $_GET['type']   ?? '';
 $age    = $_GET['age']    ?? '';
+$type   = $_GET['type']   ?? '';
 $status = $_GET['status'] ?? '';
 
 $sql = "SELECT p.id, p.product_code, p.product_name, p.generic_name, p.brand,
                p.selling_price, p.purchase_price, p.reorder_level, p.age_group,
-               p.requires_prescription, p.status,
-               c.category_name,
+               p.status, c.category_name,
                (SELECT COALESCE(SUM(quantity),0) FROM inventory_batches WHERE product_id=p.id) AS stock,
                (SELECT MIN(expiry_date) FROM inventory_batches WHERE product_id=p.id AND quantity>0) AS expiry
         FROM products p
@@ -121,16 +120,16 @@ if ($cat !== '' && ctype_digit((string)$cat)) {
     $sql .= " AND p.category_id = ?";
     $params[] = (int)$cat;
 }
+if ($age !== '') {
+    $sql .= " AND p.age_group = ?";
+    $params[] = $age;
+}
 if ($type === 'medicines') {
     $sql .= " AND (c.category_name NOT IN ('Cosmetics','Milks') OR c.id IS NULL)";
 } elseif ($type === 'cosmetics') {
     $sql .= " AND c.category_name = 'Cosmetics'";
 } elseif ($type === 'milks') {
     $sql .= " AND c.category_name = 'Milks'";
-}
-if ($age !== '') {
-    $sql .= " AND p.age_group = ?";
-    $params[] = $age;
 }
 if ($status === 'active' || $status === 'inactive') {
     $sql .= " AND p.status = ?";
@@ -149,10 +148,9 @@ $categories  = db()->query('SELECT id, category_name FROM categories ORDER BY ca
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
-
 <h1 style="display:none">Inventory</h1>
 
-<!-- 🔽 FILTER BAR -->
+<!-- FILTER BAR -->
 <div class="card">
   <form method="get" class="toolbar">
     <button type="button" class="btn btn-primary" onclick="openModal('addItem')">➕</button>
@@ -162,28 +160,18 @@ require_once __DIR__ . '/../includes/header.php';
              value="<?= e($q) ?>" style="width:100%">
     </div>
 
-    <select class="select" name="cat" onchange="this.form.submit()">
-      <option value="">All Categories</option>
-      <?php foreach ($categories as $c): ?>
-        <option value="<?= $c['id'] ?>" <?= $cat == $c['id'] ? 'selected' : '' ?>>
-          <?= e($c['category_name']) ?>
-        </option>
-      <?php endforeach; ?>
-    </select>
-
-    <select class="select" name="type" onchange="this.form.submit()">
-      <option value="">All Types</option>
-      <option value="medicines" <?= $type === 'medicines' ? 'selected' : '' ?>>Medicines</option>
-      <option value="cosmetics" <?= $type === 'cosmetics' ? 'selected' : '' ?>>Cosmetics</option>
-      <option value="milks"     <?= $type === 'milks'     ? 'selected' : '' ?>>Milks</option>
-    </select>
-
     <select class="select" name="age" onchange="this.form.submit()">
-      <option value="">All Ages</option>
+      <option value="">All Categories</option>
       <option value="adult"    <?= $age === 'adult'    ? 'selected' : '' ?>>Adults</option>
       <option value="kid"      <?= $age === 'kid'      ? 'selected' : '' ?>>Kids</option>
       <option value="infant"   <?= $age === 'infant'   ? 'selected' : '' ?>>Infants</option>
-      <option value="all_ages" <?= $age === 'all_ages' ? 'selected' : '' ?>>All Ages</option>
+    </select>
+
+    <select class="select" name="type" onchange="this.form.submit()">
+      <option value="">All Categories</option>
+      <option value="medicines" <?= $type === 'medicines' ? 'selected' : '' ?>>Medicines</option>
+      <option value="cosmetics" <?= $type === 'cosmetics' ? 'selected' : '' ?>>Cosmetics</option>
+      <option value="milks"     <?= $type === 'milks'     ? 'selected' : '' ?>>Milks</option>
     </select>
 
     <select class="select" name="status" onchange="this.form.submit()">
@@ -191,15 +179,12 @@ require_once __DIR__ . '/../includes/header.php';
       <option value="active"   <?= $status === 'active'   ? 'selected' : '' ?>>Active</option>
       <option value="inactive" <?= $status === 'inactive' ? 'selected' : '' ?>>Inactive</option>
     </select>
-
-    <?php if ($q || $cat || $type || $age || $status): ?>
-      <a class="btn" href="<?= base_url('admin/inventory.php') ?>">Reset</a>
-    <?php endif; ?>
   </form>
 
-  <!-- 🔽 CATEGORY PILLS (sortable) -->
+  <!-- CATEGORY PILLS -->
   <div class="pills">
-    <a class="pill <?= $cat === '' ? 'active' : '' ?>" href="<?= base_url('admin/inventory.php' . qs(['cat' => ''])) ?>">All</a>
+    <a class="pill <?= $cat === '' ? 'active' : '' ?>"
+       href="<?= base_url('admin/inventory.php' . qs(['cat' => ''])) ?>">All</a>
     <?php foreach ($categories as $c): ?>
       <a class="pill <?= $cat == $c['id'] ? 'active' : '' ?>"
          href="<?= base_url('admin/inventory.php' . qs(['cat' => $c['id']])) ?>">
@@ -209,7 +194,7 @@ require_once __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
-<!-- 🔽 TABLE -->
+<!-- ⬇ TABLE: Product | SKU | Price | Stock | Expiry | Status -->
 <div class="card">
   <div class="table-wrap" style="border:0">
     <table class="data">
@@ -217,8 +202,6 @@ require_once __DIR__ . '/../includes/header.php';
         <tr>
           <th>Product</th>
           <th>SKU</th>
-          <th>Category</th>
-          <th>Age</th>
           <th>Price (₱)</th>
           <th>Stock</th>
           <th>Expiry</th>
@@ -227,23 +210,33 @@ require_once __DIR__ . '/../includes/header.php';
       </thead>
       <tbody>
       <?php if (!$rows): ?>
-        <tr><td colspan="8" class="empty">No inventory records match your filters.</td></tr>
+        <tr><td colspan="6" class="empty">No inventory records match your filters.</td></tr>
       <?php endif; ?>
       <?php foreach ($rows as $r):
         $st = stock_status((int)$r['stock'], (int)$r['reorder_level']);
         $statusLabel = $st === 'low' ? 'Low Stock' : ($st === 'out' ? 'Out of Stock' : 'Normal');
         $statusCls   = $st === 'normal' ? 'status-ok' : 'status-low';
+        // Pre-fetch batches for details modal
+        $bStmt = db()->prepare('SELECT batch_number, received_date, expiry_date, quantity FROM inventory_batches WHERE product_id=? ORDER BY expiry_date ASC');
+        $bStmt->execute([$r['id']]);
+        $batches = $bStmt->fetchAll();
       ?>
-        <tr>
-          <td>
-            <div style="font-weight:600"><?= e($r['product_name']) ?></div>
-            <?php if ($r['brand']): ?><div class="text-muted" style="font-size:11px"><?= e($r['brand']) ?></div><?php endif; ?>
-          </td>
+        <tr style="cursor:pointer"
+            data-product='<?= e(json_encode([
+                'product_name'  => $r['product_name'],
+                'product_code'  => $r['product_code'],
+                'category_name' => $r['category_name'] ?? '—',
+                'supplier'      => 'ABC Pharmaceutical Supplier',
+                'stock'         => (int)$r['stock'],
+                'reorder_level' => (int)$r['reorder_level'],
+                'status'        => $statusLabel,
+                'batches'       => $batches,
+            ], JSON_HEX_APOS|JSON_HEX_QUOT)) ?>'
+            onclick="showDetails(this)">
+          <td><?= e($r['product_name']) ?></td>
           <td><?= e($r['product_code']) ?></td>
-          <td><?= e($r['category_name'] ?? '—') ?></td>
-          <td><?= e(ucfirst(str_replace('_',' ', $r['age_group']))) ?></td>
           <td><?= peso($r['selling_price']) ?></td>
-          <td><?= (int)$r['stock'] ?> <small class="text-muted">/ <?= (int)$r['reorder_level'] ?></small></td>
+          <td><?= (int)$r['stock'] ?></td>
           <td><?= $r['expiry'] ? e(date('Y-m-d', strtotime($r['expiry']))) : '—' ?></td>
           <td class="<?= $statusCls ?>"><?= $statusLabel ?></td>
         </tr>
@@ -252,9 +245,24 @@ require_once __DIR__ . '/../includes/header.php';
     </table>
   </div>
 
+  <!-- Bottom action bar (matches screenshot) -->
   <div class="toolbar" style="margin-top:14px">
-    <button class="btn" onclick="openModal('stockIn')">Stock In</button>
-    <button class="btn btn-primary" onclick="openModal('adjustStock')">Adjust Stock</button>
+    <button class="btn" type="button" onclick="openDetailsForSelected()">View</button>
+    <button class="btn" type="button" onclick="openModal('stockIn')">Stock In</button>
+    <button class="btn btn-primary" type="button" onclick="openModal('adjustStock')">Adjust Stock</button>
+  </div>
+
+  <p class="text-muted" style="padding:12px 16px">
+    Showing 1 to <?= count($rows) ?> of <?= count($rows) ?> product
+  </p>
+</div>
+
+<!-- ============ MODAL: DETAILS (matches screenshot) ============ -->
+<div class="modal-overlay" id="detailsModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('detailsModal')">✕</button>
+    <h3>Details</h3>
+    <div id="detailsBody"></div>
   </div>
 </div>
 
@@ -267,16 +275,8 @@ require_once __DIR__ . '/../includes/header.php';
       <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
       <input type="hidden" name="act" value="add_item">
       <div class="form-grid">
-
-        <div class="field"><label>Product Name <span class="req">*</span></label>
-          <input name="product_name" required></div>
-
-        <div class="field"><label>Generic Name</label>
-          <input name="generic_name"></div>
-
-        <div class="field"><label>Brand</label>
-          <input name="brand"></div>
-
+        <div class="field"><label>Brand Name <span class="req">*</span></label><input name="product_name" required></div>
+        <div class="field"><label>Batch</label><input name="batch_number"></div>
         <div class="field"><label>Category <span class="req">*</span></label>
           <select name="category_id" required>
             <option value="">Select...</option>
@@ -285,51 +285,20 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
           </select>
         </div>
-
-        <!-- ✨ NEW: Age Group -->
-        <div class="field"><label>Age Group <span class="req">*</span></label>
-          <select name="age_group" required>
-            <option value="all_ages">All Ages</option>
-            <option value="adult">Adults</option>
-            <option value="kid">Kids</option>
-            <option value="infant">Infants</option>
-          </select>
-        </div>
-
-        <!-- ✨ NEW: Supplier from DB -->
+        <div class="field"><label>SKU <span class="req">*</span></label>
+          <input name="sku" value="SKU-<?= strtoupper(bin2hex(random_bytes(2))) ?>" readonly></div>
+        <div class="field"><label>Quantity <span class="req">*</span></label><input name="quantity" type="number" value="0" required></div>
+        <div class="field"><label>Reorder Level <span class="req">*</span></label><input name="reorder_level" type="number" value="20" required></div>
+        <div class="field"><label>Unit Price (₱)</label><input name="selling_price" type="number" step="0.01" value="0" required></div>
         <div class="field"><label>Supplier</label>
           <select name="supplier_id">
-            <option value="">Select supplier...</option>
+            <option value="">Select...</option>
             <?php foreach (db()->query('SELECT id, supplier_name FROM suppliers WHERE status="active" ORDER BY supplier_name') as $s): ?>
               <option value="<?= $s['id'] ?>"><?= e($s['supplier_name']) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-
-        <div class="field"><label>Batch No.</label>
-          <input name="batch_number" placeholder="Auto if blank"></div>
-
-        <div class="field"><label>Quantity <span class="req">*</span></label>
-          <input name="quantity" type="number" value="0" required></div>
-
-        <div class="field"><label>Reorder Level <span class="req">*</span></label>
-          <input name="reorder_level" type="number" value="20" required></div>
-
-        <div class="field"><label>Purchase Price (₱)</label>
-          <input name="purchase_price" type="number" step="0.01" value="0"></div>
-
-        <div class="field"><label>Selling Price (₱) <span class="req">*</span></label>
-          <input name="selling_price" type="number" step="0.01" value="0" required></div>
-
-        <div class="field"><label>Expiry Date</label>
-          <input name="expiry_date" type="date"></div>
-
-        <div class="field full">
-          <label>
-            <input type="checkbox" name="requires_prescription" value="1" style="width:auto"> 
-            Requires prescription
-          </label>
-        </div>
+        <div class="field full"><label>Expiry Date</label><input name="expiry_date" type="date"></div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-light" onclick="closeModal('addItem')">Cancel</button>
@@ -348,29 +317,18 @@ require_once __DIR__ . '/../includes/header.php';
       <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
       <input type="hidden" name="act" value="stock_in">
       <div class="form-grid">
-
         <div class="field"><label>Product</label>
           <select name="product_id" required>
             <option value="">Select...</option>
             <?php foreach ($allProducts as $p): ?>
-              <option value="<?= $p['id'] ?>"><?= e($p['product_name']) ?> (<?= e($p['product_code']) ?>)</option>
+              <option value="<?= $p['id'] ?>"><?= e($p['product_name']) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-
-        <div class="field"><label>Cost per Unit (₱)</label>
-          <input name="cost_per_unit" type="number" step="0.01" value="0"></div>
-
-        <div class="field"><label>Batch No. <span class="req">*</span></label>
-          <input name="batch_number" required></div>
-
-        <div class="field"><label>Expiry Date</label>
-          <input name="expiry_date" type="date"></div>
-
-        <div class="field"><label>Quantity <span class="req">*</span></label>
-          <input name="quantity" type="number" min="1" required></div>
-
-        <!-- ✨ NEW: Supplier from DB -->
+        <div class="field"><label>Cost per Unit</label><input name="cost_per_unit" type="number" step="0.01" value="0"></div>
+        <div class="field"><label>Batch</label><input name="batch_number" required></div>
+        <div class="field"><label>Expiry Date</label><input name="expiry_date" type="date"></div>
+        <div class="field"><label>Quantity <span class="req">*</span></label><input name="quantity" type="number" min="1" required></div>
         <div class="field"><label>Supplier</label>
           <select name="supplier_id">
             <option value="">Select supplier...</option>
@@ -397,7 +355,6 @@ require_once __DIR__ . '/../includes/header.php';
       <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
       <input type="hidden" name="act" value="adjust">
       <div class="form-grid">
-
         <div class="field"><label>Product</label>
           <select name="product_id" required>
             <option value="">Select...</option>
@@ -406,7 +363,7 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
           </select>
         </div>
-
+        <div class="field"><label>New Quantity</label><input name="new_quantity" type="number" min="0" required></div>
         <div class="field"><label>Batch</label>
           <select name="batch_id" required>
             <option value="">Select batch...</option>
@@ -415,10 +372,6 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
           </select>
         </div>
-
-        <div class="field"><label>New Quantity</label>
-          <input name="new_quantity" type="number" min="0" required></div>
-
         <div class="field"><label>Reason</label>
           <select name="reason">
             <option value="damaged">Damaged / Missing / Correction</option>
@@ -426,9 +379,7 @@ require_once __DIR__ . '/../includes/header.php';
             <option value="adjustment">Manual Adjustment</option>
           </select>
         </div>
-
-        <div class="field full"><label>Notes</label>
-          <textarea name="notes" rows="2"></textarea></div>
+        <div class="field full"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-light" onclick="closeModal('adjustStock')">Cancel</button>
@@ -437,5 +388,72 @@ require_once __DIR__ . '/../includes/header.php';
     </form>
   </div>
 </div>
+
+<script>
+let selectedProduct = null;
+
+function showDetails(rowEl) {
+  const p = JSON.parse(rowEl.dataset.product);
+  selectedProduct = p;
+
+  let batchesHtml = '';
+  if (p.batches && p.batches.length) {
+    batchesHtml = `
+      <table class="data" style="margin-top:8px;border:1px solid #e5e9f2;border-radius:8px;overflow:hidden">
+        <thead>
+          <tr>
+            <th>Batch No.</th>
+            <th>Date Received</th>
+            <th>Expiry Date</th>
+            <th>Qty</th>
+            <th>Available</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${p.batches.map(b => `
+            <tr>
+              <td>${b.batch_number}</td>
+              <td>${b.received_date || '—'}</td>
+              <td>${b.expiry_date || '—'}</td>
+              <td>${b.quantity}</td>
+              <td>${b.quantity}</td>
+              <td class="status-ok">Normal</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } else {
+    batchesHtml = '<p class="text-muted">No batches recorded.</p>';
+  }
+
+  document.getElementById('detailsBody').innerHTML = `
+    <p><b>Product:</b> ${p.product_name}</p>
+    <p><b>SKU:</b> ${p.product_code}</p>
+    <p><b>Category:</b> ${p.category_name}</p>
+    <p><b>Supplier:</b> ${p.supplier}</p>
+    <hr style="border:none;border-top:1px solid #e5e9f2;margin:14px 0">
+    <div style="display:flex;gap:24px;flex-wrap:wrap">
+      <div><b>Current Stock:</b> ${p.stock}</div>
+      <div><b>Reorder Level:</b> ${p.reorder_level}</div>
+      <div><b>Status:</b> <span class="${p.status === 'Normal' ? 'status-ok' : 'status-low'}">${p.status.toUpperCase()}</span></div>
+    </div>
+    <h4 style="margin-top:20px;font-size:13px;text-transform:uppercase;letter-spacing:.5px">Batch Information</h4>
+    ${batchesHtml}
+  `;
+
+  openModal('detailsModal');
+}
+
+function openDetailsForSelected() {
+  if (selectedProduct) {
+    // Re-open the modal with the last selected product
+    document.getElementById('detailsModal').classList.add('show');
+  } else {
+    alert('Click a row first to see its details.');
+  }
+}
+</script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
