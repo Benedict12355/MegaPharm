@@ -102,3 +102,78 @@ function notify_admins(string $type, string $title, string $message, ?string $re
     $stmt = db()->query("SELECT id FROM users WHERE role='admin' AND status='active'");
     foreach ($stmt as $r) notify((int)$r['id'], $type, $title, $message, $relatedType, $relatedId);
 }
+
+/**
+ * Build a WHERE clause fragment + params array from common filter inputs.
+ * Usage:
+ *   [$where, $params] = build_product_filters($_GET, ['p', 'b']);
+ */
+function build_product_filters(array $get, array $aliases = []): array {
+    $p = $aliases[0] ?? 'p'; // product table alias
+    $b = $aliases[1] ?? 'b'; // batch table alias (may be unused)
+
+    $where  = ' WHERE 1=1';
+    $params = [];
+
+    // Search
+    if (!empty($get['q'])) {
+        $where .= " AND ($p.product_name LIKE ? OR $p.generic_name LIKE ? OR $p.product_code LIKE ? OR $p.brand LIKE ?)";
+        $s = '%' . $get['q'] . '%';
+        array_push($params, $s, $s, $s, $s);
+    }
+
+    // Category (specific category_id)
+    if (!empty($get['cat']) && ctype_digit((string)$get['cat'])) {
+        $where .= " AND $p.category_id = ?";
+        $params[] = (int)$get['cat'];
+    }
+
+    // Type filter: medicines / cosmetics / milks
+    if (!empty($get['type'])) {
+        switch ($get['type']) {
+            case 'medicines':
+                $where .= " AND c.category_name NOT IN ('Cosmetics','Milks')";
+                break;
+            case 'cosmetics':
+                $where .= " AND c.category_name = 'Cosmetics'";
+                break;
+            case 'milks':
+                $where .= " AND c.category_name = 'Milks'";
+                break;
+        }
+    }
+
+    // Age group: adult / kid / infant
+    if (!empty($get['age'])) {
+        $where .= " AND $p.age_group = ?";
+        $params[] = $get['age'];
+    }
+
+    // Status: active / inactive
+    if (!empty($get['status'])) {
+        if ($get['status'] === 'active' || $get['status'] === 'inactive') {
+            $where .= " AND $p.status = ?";
+            $params[] = $get['status'];
+        }
+    }
+
+    return [$where, $params];
+}
+
+/**
+ * Returns a stock status string: 'low', 'out', 'normal'
+ */
+function stock_status(int $qty, int $reorder): string {
+    if ($qty <= 0) return 'out';
+    if ($qty <= $reorder) return 'low';
+    return 'normal';
+}
+
+/**
+ * Builds a querystring preserving current GET params, overriding given ones.
+ */
+function qs(array $overrides = []): string {
+    $params = array_merge($_GET, $overrides);
+    $params = array_filter($params, fn($v) => $v !== '' && $v !== null);
+    return $params ? '?' . http_build_query($params) : '';
+}
