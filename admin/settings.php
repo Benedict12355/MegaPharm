@@ -2,6 +2,10 @@
 // admin/settings.php
 require_once __DIR__ . '/../includes/functions.php';
 require_login();
+
+// Fetch current user BEFORE using $u
+$u = current_user();
+
 $active = 'settings';
 $page_title = 'Settings';
 
